@@ -1,0 +1,16 @@
+spring:
+  cloud:
+    config:
+      enabled: false
+
+server:
+  port: 0
+
+eureka:
+  instance:
+    prefer-ip-address: true
+  client:
+    registerWithEureka: false
+    fetchRegistry: false
+    server:
+      waitTimeInMsWhenSyncEmpty: 0
