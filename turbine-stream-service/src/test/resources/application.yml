@@ -1,0 +1,21 @@
+server:
+  port: 0
+
+spring:
+  cloud:
+    config:
+      enabled: false
+    bus:
+      enabled: false
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
+
+eureka:
+  client:
+    enabled: false
+
+management:
+  tracing:
+    enabled: false
