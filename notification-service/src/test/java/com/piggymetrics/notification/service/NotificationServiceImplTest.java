@@ -4,17 +4,25 @@ import com.google.common.collect.ImmutableList;
 import com.piggymetrics.notification.client.AccountServiceClient;
 import com.piggymetrics.notification.domain.NotificationType;
 import com.piggymetrics.notification.domain.Recipient;
-import org.junit.Before;
-import org.junit.Test;
+import jakarta.mail.MessagingException;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
-import javax.mail.MessagingException;
 import java.io.IOException;
 
-import static org.mockito.Mockito.*;
-import static org.mockito.MockitoAnnotations.initMocks;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 public class NotificationServiceImplTest {
 
 	@InjectMocks
@@ -28,11 +36,6 @@ public class NotificationServiceImplTest {
 
 	@Mock
 	private EmailService emailService;
-
-	@Before
-	public void setup() {
-		initMocks(this);
-	}
 
 	@Test
 	public void shouldSendBackupNotificationsEvenWhenErrorsOccursForSomeRecipients() throws IOException, MessagingException, InterruptedException {

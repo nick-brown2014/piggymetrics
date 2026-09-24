@@ -7,20 +7,22 @@ import com.piggymetrics.notification.domain.NotificationSettings;
 import com.piggymetrics.notification.domain.NotificationType;
 import com.piggymetrics.notification.domain.Recipient;
 import com.piggymetrics.notification.repository.RecipientRepository;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Date;
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.MockitoAnnotations.initMocks;
 
+@ExtendWith(MockitoExtension.class)
 public class RecipientServiceImplTest {
 
 	@InjectMocks
@@ -28,11 +30,6 @@ public class RecipientServiceImplTest {
 
 	@Mock
 	private RecipientRepository repository;
-
-	@Before
-	public void setup() {
-		initMocks(this);
-	}
 
 	@Test
 	public void shouldFindByAccountName() {
@@ -45,9 +42,9 @@ public class RecipientServiceImplTest {
 		assertEquals(recipient, found);
 	}
 
-	@Test(expected = IllegalArgumentException.class)
+	@Test
 	public void shouldFailToFindRecipientWhenAccountNameIsEmpty() {
-		recipientService.findByAccountName("");
+		assertThrows(IllegalArgumentException.class, () -> recipientService.findByAccountName(""));
 	}
 
 	@Test

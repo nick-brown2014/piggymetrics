@@ -6,6 +6,8 @@ security:
       accessTokenUri: http://auth-service:5000/uaa/oauth/token
       grant-type: client_credentials
       scope: server
+    resource:
+      user-info-uri: http://auth-service:5000/uaa/users/current
 
 server:
   servlet:
@@ -26,6 +28,23 @@ backup:
     attachment: backup.json
 
 spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          notification-service:
+            client-id: notification-service
+            client-secret: ${NOTIFICATION_SERVICE_PASSWORD}
+            authorization-grant-type: client_credentials
+            scope: server
+            provider: auth-service
+        provider:
+          auth-service:
+            token-uri: http://auth-service:5000/uaa/oauth/token
+  cloud:
+    openfeign:
+      circuitbreaker:
+        enabled: true
   data:
     mongodb:
       host: notification-mongodb
@@ -48,3 +67,9 @@ spring:
             fallback: false
           ssl:
             enable: true
+
+resilience4j:
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 10s
