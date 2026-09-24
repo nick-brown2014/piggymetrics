@@ -10,15 +10,14 @@ import com.piggymetrics.statistics.domain.TimePeriod;
 import com.piggymetrics.statistics.domain.timeseries.DataPoint;
 import com.piggymetrics.statistics.domain.timeseries.DataPointId;
 import com.piggymetrics.statistics.service.StatisticsService;
-import com.sun.security.auth.UserPrincipal;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.junit4.SpringRunner;
+import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -29,15 +28,13 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.MockitoAnnotations.initMocks;
 import static org.mockito.internal.verification.VerificationModeFactory.times;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@RunWith(SpringRunner.class)
-@SpringBootTest
+@ExtendWith(MockitoExtension.class)
 public class StatisticsControllerTest {
 
 	private static final ObjectMapper mapper = new ObjectMapper();
@@ -50,9 +47,8 @@ public class StatisticsControllerTest {
 
 	private MockMvc mockMvc;
 
-	@Before
+	@BeforeEach
 	public void setup() {
-		initMocks(this);
 		this.mockMvc = MockMvcBuilders.standaloneSetup(statisticsController).build();
 	}
 
@@ -65,7 +61,7 @@ public class StatisticsControllerTest {
 		when(statisticsService.findByAccountName(dataPoint.getId().getAccount()))
 				.thenReturn(ImmutableList.of(dataPoint));
 
-		mockMvc.perform(get("/test").principal(new UserPrincipal(dataPoint.getId().getAccount())))
+		mockMvc.perform(get("/test").principal(new TestingAuthenticationToken(dataPoint.getId().getAccount(), null)))
 				.andExpect(jsonPath("$[0].id.account").value(dataPoint.getId().getAccount()))
 				.andExpect(status().isOk());
 	}
@@ -79,7 +75,7 @@ public class StatisticsControllerTest {
 		when(statisticsService.findByAccountName(dataPoint.getId().getAccount()))
 				.thenReturn(ImmutableList.of(dataPoint));
 
-		mockMvc.perform(get("/current").principal(new UserPrincipal(dataPoint.getId().getAccount())))
+		mockMvc.perform(get("/current").principal(new TestingAuthenticationToken(dataPoint.getId().getAccount(), null)))
 				.andExpect(jsonPath("$[0].id.account").value(dataPoint.getId().getAccount()))
 				.andExpect(status().isOk());
 	}

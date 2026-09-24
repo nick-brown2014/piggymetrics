@@ -11,10 +11,11 @@ import com.piggymetrics.statistics.domain.timeseries.DataPoint;
 import com.piggymetrics.statistics.domain.timeseries.ItemMetric;
 import com.piggymetrics.statistics.domain.timeseries.StatisticMetric;
 import com.piggymetrics.statistics.repository.DataPointRepository;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -24,15 +25,16 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.AdditionalAnswers.returnsFirstArg;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.MockitoAnnotations.initMocks;
 
+@ExtendWith(MockitoExtension.class)
 public class StatisticsServiceImplTest {
 
 	@InjectMocks
@@ -44,11 +46,6 @@ public class StatisticsServiceImplTest {
 	@Mock
 	private DataPointRepository repository;
 
-	@Before
-	public void setup() {
-		initMocks(this);
-	}
-
 	@Test
 	public void shouldFindDataPointListByAccountName() {
 		final List<DataPoint> list = ImmutableList.of(new DataPoint());
@@ -58,14 +55,14 @@ public class StatisticsServiceImplTest {
 		assertEquals(list, result);
 	}
 
-	@Test(expected = IllegalArgumentException.class)
+	@Test
 	public void shouldFailToFindDataPointWhenAccountNameIsNull() {
-		statisticsService.findByAccountName(null);
+		assertThrows(IllegalArgumentException.class, () -> statisticsService.findByAccountName(null));
 	}
 
-	@Test(expected = IllegalArgumentException.class)
+	@Test
 	public void shouldFailToFindDataPointWhenAccountNameIsEmpty() {
-		statisticsService.findByAccountName("");
+		assertThrows(IllegalArgumentException.class, () -> statisticsService.findByAccountName(""));
 	}
 
 	@Test
