@@ -1,0 +1,26 @@
+spring:
+  cloud:
+    config:
+      enabled: false
+    gateway:
+      routes:
+        - id: auth-service
+          uri: http://localhost:${wiremock.server.port:5000}
+          predicates:
+            - Path=/uaa/**
+        - id: account-service
+          uri: http://localhost:${wiremock.server.port:6000}
+          predicates:
+            - Path=/accounts/**
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
+
+eureka:
+  client:
+    enabled: false
+
+management:
+  tracing:
+    enabled: false
