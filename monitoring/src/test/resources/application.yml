@@ -1,0 +1,16 @@
+spring:
+  cloud:
+    config:
+      enabled: false
+
+eureka:
+  client:
+    enabled: false
+
+management:
+  tracing:
+    enabled: false
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,circuitbreakers,metrics
