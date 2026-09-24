@@ -1,5 +1,5 @@
-FROM java:8-jre
-MAINTAINER Alexander Lukyanchikov <sqshq@sqshq.com>
+FROM eclipse-temurin:21-jre
+LABEL maintainer="Alexander Lukyanchikov <sqshq@sqshq.com>"
 
 ADD ./target/config.jar /app/
 CMD ["java", "-Xmx200m", "-jar", "/app/config.jar"]
