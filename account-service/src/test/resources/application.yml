@@ -1,5 +1,52 @@
 spring:
+  cloud:
+    config:
+      enabled: false
+    openfeign:
+      circuitbreaker:
+        enabled: true
   data:
     mongodb:
       database: piggymetrics
-      port: 0
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
+  security:
+    oauth2:
+      client:
+        registration:
+          account-service:
+            client-id: account-service
+            client-secret: secret
+            authorization-grant-type: client_credentials
+            scope: server
+            provider: auth-service
+        provider:
+          auth-service:
+            token-uri: http://localhost:5000/uaa/oauth/token
+
+de:
+  flapdoodle:
+    mongodb:
+      embedded:
+        version: 7.0.14
+
+eureka:
+  client:
+    enabled: false
+
+management:
+  tracing:
+    enabled: false
+
+resilience4j:
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 20s
+
+security:
+  oauth2:
+    resource:
+      user-info-uri: http://localhost:5000/uaa/users/current

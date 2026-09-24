@@ -1,60 +1,69 @@
 package com.piggymetrics.account.config;
 
+import com.piggymetrics.account.client.OAuth2ClientCredentialsFeignRequestInterceptor;
 import com.piggymetrics.account.service.security.CustomUserInfoTokenServices;
 import feign.RequestInterceptor;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.security.oauth2.resource.ResourceServerProperties;
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.cloud.security.oauth2.client.feign.OAuth2FeignRequestInterceptor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.oauth2.client.DefaultOAuth2ClientContext;
-import org.springframework.security.oauth2.client.OAuth2RestTemplate;
-import org.springframework.security.oauth2.client.token.grant.client.ClientCredentialsResourceDetails;
-import org.springframework.security.oauth2.config.annotation.web.configuration.EnableResourceServer;
-import org.springframework.security.oauth2.config.annotation.web.configuration.ResourceServerConfigurerAdapter;
-import org.springframework.security.oauth2.provider.token.ResourceServerTokenServices;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.client.AuthorizedClientServiceOAuth2AuthorizedClientManager;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProvider;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProviderBuilder;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.oauth2.server.resource.introspection.OpaqueTokenIntrospector;
+import org.springframework.security.web.SecurityFilterChain;
 
 /**
+ * OAuth2 resource server backed by opaque token introspection against the
+ * legacy {@code auth-service} user-info endpoint. This module is also an OAuth2
+ * client: its Feign clients obtain client-credentials tokens through
+ * {@link OAuth2ClientCredentialsFeignRequestInterceptor}.
+ *
  * @author cdov
  */
 @Configuration
-@EnableResourceServer
-public class ResourceServerConfig extends ResourceServerConfigurerAdapter {
+@EnableWebSecurity
+public class ResourceServerConfig {
 
-    private final ResourceServerProperties sso;
+	@Bean
+	public OpaqueTokenIntrospector opaqueTokenIntrospector(
+			@Value("${security.oauth2.resource.user-info-uri}") String userInfoUri,
+			@Value("${security.oauth2.client.clientId:account-service}") String clientId) {
+		return new CustomUserInfoTokenServices(userInfoUri, clientId);
+	}
 
-    @Autowired
-    public ResourceServerConfig(ResourceServerProperties sso) {
-        this.sso = sso;
-    }
+	@Bean
+	public SecurityFilterChain securityFilterChain(HttpSecurity http, OpaqueTokenIntrospector introspector) throws Exception {
+		http
+				.csrf(csrf -> csrf.disable())
+				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+				.authorizeHttpRequests(authorize -> authorize
+						.requestMatchers("/", "/demo").permitAll()
+						.anyRequest().authenticated())
+				.oauth2ResourceServer(oauth2 -> oauth2
+						.opaqueToken(opaque -> opaque.introspector(introspector)));
+		return http.build();
+	}
 
-    @Bean
-    @ConfigurationProperties(prefix = "security.oauth2.client")
-    public ClientCredentialsResourceDetails clientCredentialsResourceDetails() {
-        return new ClientCredentialsResourceDetails();
-    }
+	@Bean
+	public OAuth2AuthorizedClientManager authorizedClientManager(ClientRegistrationRepository registrations,
+			OAuth2AuthorizedClientService clientService) {
+		OAuth2AuthorizedClientProvider provider = OAuth2AuthorizedClientProviderBuilder.builder()
+				.clientCredentials().build();
+		AuthorizedClientServiceOAuth2AuthorizedClientManager manager =
+				new AuthorizedClientServiceOAuth2AuthorizedClientManager(registrations, clientService);
+		manager.setAuthorizedClientProvider(provider);
+		return manager;
+	}
 
-    @Bean
-    public RequestInterceptor oauth2FeignRequestInterceptor(){
-        return new OAuth2FeignRequestInterceptor(new DefaultOAuth2ClientContext(), clientCredentialsResourceDetails());
-    }
-
-    @Bean
-    public OAuth2RestTemplate clientCredentialsRestTemplate() {
-        return new OAuth2RestTemplate(clientCredentialsResourceDetails());
-    }
-
-    @Bean
-    public ResourceServerTokenServices tokenServices() {
-        return new CustomUserInfoTokenServices(sso.getUserInfoUri(), sso.getClientId());
-    }
-
-    @Override
-    public void configure(HttpSecurity http) throws Exception {
-        http.authorizeRequests()
-                .antMatchers("/" , "/demo").permitAll()
-                .anyRequest().authenticated();
-    }
+	@Bean
+	public RequestInterceptor oauth2FeignRequestInterceptor(OAuth2AuthorizedClientManager manager,
+			@Value("${security.oauth2.client.clientId:account-service}") String clientId) {
+		return new OAuth2ClientCredentialsFeignRequestInterceptor(manager, clientId);
+	}
 }

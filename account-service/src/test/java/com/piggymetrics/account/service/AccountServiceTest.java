@@ -4,19 +4,21 @@ import com.piggymetrics.account.client.AuthServiceClient;
 import com.piggymetrics.account.client.StatisticsServiceClient;
 import com.piggymetrics.account.domain.*;
 import com.piggymetrics.account.repository.AccountRepository;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
-import static org.mockito.MockitoAnnotations.initMocks;
 
+@ExtendWith(MockitoExtension.class)
 public class AccountServiceTest {
 
 	@InjectMocks
@@ -31,11 +33,6 @@ public class AccountServiceTest {
 	@Mock
 	private AccountRepository repository;
 
-	@Before
-	public void setup() {
-		initMocks(this);
-	}
-
 	@Test
 	public void shouldFindByName() {
 
@@ -48,9 +45,9 @@ public class AccountServiceTest {
 		assertEquals(account, found);
 	}
 
-	@Test(expected = IllegalArgumentException.class)
+	@Test
 	public void shouldFailWhenNameIsEmpty() {
-		accountService.findByName("");
+		assertThrows(IllegalArgumentException.class, () -> accountService.findByName(""));
 	}
 
 	@Test
@@ -126,24 +123,23 @@ public class AccountServiceTest {
 		assertEquals(update.getExpenses().get(0).getCurrency(), account.getExpenses().get(0).getCurrency());
 		assertEquals(update.getExpenses().get(0).getPeriod(), account.getExpenses().get(0).getPeriod());
 		assertEquals(update.getExpenses().get(0).getIcon(), account.getExpenses().get(0).getIcon());
-		
+
 		assertEquals(update.getIncomes().get(0).getTitle(), account.getIncomes().get(0).getTitle());
 		assertEquals(0, update.getIncomes().get(0).getAmount().compareTo(account.getIncomes().get(0).getAmount()));
 		assertEquals(update.getIncomes().get(0).getCurrency(), account.getIncomes().get(0).getCurrency());
 		assertEquals(update.getIncomes().get(0).getPeriod(), account.getIncomes().get(0).getPeriod());
 		assertEquals(update.getIncomes().get(0).getIcon(), account.getIncomes().get(0).getIcon());
-		
+
 		verify(repository, times(1)).save(account);
 		verify(statisticsClient, times(1)).updateStatistics("test", account);
 	}
 
-	@Test(expected = IllegalArgumentException.class)
+	@Test
 	public void shouldFailWhenNoAccountsExistedWithGivenName() {
 		final Account update = new Account();
 		update.setIncomes(Arrays.asList(new Item()));
 		update.setExpenses(Arrays.asList(new Item()));
 
-		when(accountService.findByName("test")).thenReturn(null);
-		accountService.saveChanges("test", update);
+		assertThrows(IllegalArgumentException.class, () -> accountService.saveChanges("test", update));
 	}
 }
