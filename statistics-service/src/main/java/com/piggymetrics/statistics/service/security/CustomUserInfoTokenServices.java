@@ -1,138 +1,142 @@
 package com.piggymetrics.statistics.service.security;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.springframework.boot.autoconfigure.security.oauth2.resource.AuthoritiesExtractor;
-import org.springframework.boot.autoconfigure.security.oauth2.resource.FixedAuthoritiesExtractor;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.AuthenticationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.RequestEntity;
 import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.oauth2.client.OAuth2RestOperations;
-import org.springframework.security.oauth2.client.OAuth2RestTemplate;
-import org.springframework.security.oauth2.client.resource.BaseOAuth2ProtectedResourceDetails;
-import org.springframework.security.oauth2.common.DefaultOAuth2AccessToken;
-import org.springframework.security.oauth2.common.OAuth2AccessToken;
-import org.springframework.security.oauth2.common.exceptions.InvalidTokenException;
-import org.springframework.security.oauth2.provider.OAuth2Authentication;
-import org.springframework.security.oauth2.provider.OAuth2Request;
-import org.springframework.security.oauth2.provider.token.ResourceServerTokenServices;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.core.OAuth2AuthenticatedPrincipal;
+import org.springframework.security.oauth2.core.DefaultOAuth2AuthenticatedPrincipal;
+import org.springframework.security.oauth2.core.OAuth2TokenIntrospectionClaimNames;
+import org.springframework.security.oauth2.server.resource.introspection.BadOpaqueTokenException;
+import org.springframework.security.oauth2.server.resource.introspection.OpaqueTokenIntrospector;
+import org.springframework.web.client.RestOperations;
+import org.springframework.web.client.RestTemplate;
 
-import java.util.*;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
- * Extended implementation of {@link org.springframework.boot.autoconfigure.security.oauth2.resource.UserInfoTokenServices}
+ * {@link OpaqueTokenIntrospector} that validates opaque tokens against the legacy
+ * (Spring Boot 2 / spring-security-oauth2) {@code auth-service} user-info endpoint.
  *
- * By default, it designed to return only user details. This class provides {@link #getRequest(Map)} method, which
- * returns clientId and scope of calling service. This information used in controller's security checks.
+ * The legacy endpoint returns a serialized {@code OAuth2Authentication}. Besides the user
+ * principal, this introspector also extracts {@code oauth2Request.clientId} and
+ * {@code oauth2Request.scope} of the calling service and exposes the scopes as
+ * {@code SCOPE_} prefixed authorities, so they can be used in controller security checks.
  */
+public class CustomUserInfoTokenServices implements OpaqueTokenIntrospector {
 
-public class CustomUserInfoTokenServices implements ResourceServerTokenServices {
-
-	protected final Log logger = LogFactory.getLog(getClass());
+	private static final Logger logger = LoggerFactory.getLogger(CustomUserInfoTokenServices.class);
 
 	private static final String[] PRINCIPAL_KEYS = new String[] { "user", "username",
 			"userid", "user_id", "login", "id", "name" };
 
-	private final String userInfoEndpointUrl;
+	private static final String SCOPE_AUTHORITY_PREFIX = "SCOPE_";
+
+	private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE =
+			new ParameterizedTypeReference<>() {};
+
+	private final URI userInfoEndpointUri;
 
 	private final String clientId;
 
-	private OAuth2RestOperations restTemplate;
-
-	private String tokenType = DefaultOAuth2AccessToken.BEARER_TYPE;
-
-	private AuthoritiesExtractor authoritiesExtractor = new FixedAuthoritiesExtractor();
+	private RestOperations restTemplate = new RestTemplate();
 
 	public CustomUserInfoTokenServices(String userInfoEndpointUrl, String clientId) {
-		this.userInfoEndpointUrl = userInfoEndpointUrl;
+		this.userInfoEndpointUri = URI.create(userInfoEndpointUrl);
 		this.clientId = clientId;
 	}
 
-	public void setTokenType(String tokenType) {
-		this.tokenType = tokenType;
-	}
-
-	public void setRestTemplate(OAuth2RestOperations restTemplate) {
+	public void setRestTemplate(RestOperations restTemplate) {
 		this.restTemplate = restTemplate;
 	}
 
-	public void setAuthoritiesExtractor(AuthoritiesExtractor authoritiesExtractor) {
-		this.authoritiesExtractor = authoritiesExtractor;
-	}
-
 	@Override
-	public OAuth2Authentication loadAuthentication(String accessToken)
-			throws AuthenticationException, InvalidTokenException {
-		Map<String, Object> map = getMap(this.userInfoEndpointUrl, accessToken);
+	public OAuth2AuthenticatedPrincipal introspect(String token) {
+		Map<String, Object> map = getMap(token);
 		if (map.containsKey("error")) {
-			this.logger.debug("userinfo returned error: " + map.get("error"));
-			throw new InvalidTokenException(accessToken);
+			logger.debug("userinfo returned error: {}", map.get("error"));
+			throw new BadOpaqueTokenException("Provided token isn't active");
 		}
-		return extractAuthentication(map);
+		return extractPrincipal(map);
 	}
 
-	private OAuth2Authentication extractAuthentication(Map<String, Object> map) {
-		Object principal = getPrincipal(map);
-		OAuth2Request request = getRequest(map);
-		List<GrantedAuthority> authorities = this.authoritiesExtractor
-				.extractAuthorities(map);
-		UsernamePasswordAuthenticationToken token = new UsernamePasswordAuthenticationToken(
-				principal, "N/A", authorities);
-		token.setDetails(map);
-		return new OAuth2Authentication(request, token);
+	private OAuth2AuthenticatedPrincipal extractPrincipal(Map<String, Object> map) {
+		String principal = getPrincipal(map);
+		Map<String, Object> request = getRequest(map);
+		String requestClientId = (String) request.get("clientId");
+		Set<String> scopes = getScopes(request);
+
+		Collection<GrantedAuthority> authorities = new ArrayList<>();
+		for (String scope : scopes) {
+			authorities.add(new SimpleGrantedAuthority(SCOPE_AUTHORITY_PREFIX + scope));
+		}
+
+		Map<String, Object> attributes = new LinkedHashMap<>(map);
+		attributes.put(OAuth2TokenIntrospectionClaimNames.ACTIVE, true);
+		attributes.put(OAuth2TokenIntrospectionClaimNames.SUB, principal);
+		attributes.put(OAuth2TokenIntrospectionClaimNames.SCOPE, new ArrayList<>(scopes));
+		if (requestClientId != null) {
+			attributes.put(OAuth2TokenIntrospectionClaimNames.CLIENT_ID, requestClientId);
+		}
+
+		return new DefaultOAuth2AuthenticatedPrincipal(principal, attributes, authorities);
 	}
 
-	private Object getPrincipal(Map<String, Object> map) {
+	private String getPrincipal(Map<String, Object> map) {
 		for (String key : PRINCIPAL_KEYS) {
 			if (map.containsKey(key)) {
-				return map.get(key);
+				return String.valueOf(map.get(key));
 			}
 		}
 		return "unknown";
 	}
 
-	@SuppressWarnings({ "unchecked" })
-	private OAuth2Request getRequest(Map<String, Object> map) {
-		Map<String, Object> request = (Map<String, Object>) map.get("oauth2Request");
-
-		String clientId = (String) request.get("clientId");
-		Set<String> scope = new LinkedHashSet<>(request.containsKey("scope") ?
-				(Collection<String>) request.get("scope") : Collections.<String>emptySet());
-
-		return new OAuth2Request(null, clientId, null, true, new HashSet<>(scope),
-				null, null, null, null);
+	@SuppressWarnings("unchecked")
+	private Map<String, Object> getRequest(Map<String, Object> map) {
+		Object request = map.get("oauth2Request");
+		if (request instanceof Map<?, ?>) {
+			return (Map<String, Object>) request;
+		}
+		return Collections.emptyMap();
 	}
 
-	@Override
-	public OAuth2AccessToken readAccessToken(String accessToken) {
-		throw new UnsupportedOperationException("Not supported: read access token");
+	@SuppressWarnings("unchecked")
+	private Set<String> getScopes(Map<String, Object> request) {
+		Object scope = request.get("scope");
+		if (scope instanceof Collection<?>) {
+			return new LinkedHashSet<>((Collection<String>) scope);
+		}
+		if (scope instanceof String) {
+			return new LinkedHashSet<>(List.of(((String) scope).split(" ")));
+		}
+		return Collections.emptySet();
 	}
 
-	@SuppressWarnings({ "unchecked" })
-	private Map<String, Object> getMap(String path, String accessToken) {
-		this.logger.debug("Getting user info from: " + path);
+	private Map<String, Object> getMap(String accessToken) {
+		logger.debug("Getting user info from: {}", userInfoEndpointUri);
 		try {
-			OAuth2RestOperations restTemplate = this.restTemplate;
-			if (restTemplate == null) {
-				BaseOAuth2ProtectedResourceDetails resource = new BaseOAuth2ProtectedResourceDetails();
-				resource.setClientId(this.clientId);
-				restTemplate = new OAuth2RestTemplate(resource);
-			}
-			OAuth2AccessToken existingToken = restTemplate.getOAuth2ClientContext()
-					.getAccessToken();
-			if (existingToken == null || !accessToken.equals(existingToken.getValue())) {
-				DefaultOAuth2AccessToken token = new DefaultOAuth2AccessToken(
-						accessToken);
-				token.setTokenType(this.tokenType);
-				restTemplate.getOAuth2ClientContext().setAccessToken(token);
-			}
-			return restTemplate.getForEntity(path, Map.class).getBody();
+			RequestEntity<Void> request = RequestEntity.method(HttpMethod.GET, userInfoEndpointUri)
+					.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+					.build();
+			Map<String, Object> body = restTemplate.exchange(request, MAP_TYPE).getBody();
+			return body != null ? body : Collections.singletonMap("error", "Empty user details response");
 		}
 		catch (Exception ex) {
-			this.logger.info("Could not fetch user details: " + ex.getClass() + ", "
-					+ ex.getMessage());
-			return Collections.<String, Object>singletonMap("error",
-					"Could not fetch user details");
+			logger.info("Could not fetch user details for client {}: {}, {}", clientId,
+					ex.getClass(), ex.getMessage());
+			return Collections.singletonMap("error", "Could not fetch user details");
 		}
 	}
 }

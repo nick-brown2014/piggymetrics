@@ -6,6 +6,8 @@ security:
       accessTokenUri: http://auth-service:5000/uaa/oauth/token
       grant-type: client_credentials
       scope: server
+    resource:
+      user-info-uri: http://auth-service:5000/uaa/users/current
 
 spring:
   data:
@@ -15,6 +17,16 @@ spring:
       password: ${MONGODB_PASSWORD}
       database: piggymetrics
       port: 27017
+  cloud:
+    openfeign:
+      circuitbreaker:
+        enabled: true
+
+resilience4j:
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 10s
 
 server:
   servlet:
