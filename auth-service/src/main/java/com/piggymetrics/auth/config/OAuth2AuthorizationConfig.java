@@ -1,6 +1,7 @@
 package com.piggymetrics.auth.config;
 
 import com.piggymetrics.auth.security.AuthorizationServiceTokenIntrospector;
+import com.piggymetrics.auth.security.ExpiringInMemoryOAuth2AuthorizationService;
 import com.piggymetrics.auth.security.LegacyBasicClientAuthenticationConverter;
 import com.piggymetrics.auth.security.PasswordGrantAuthenticationConverter;
 import com.piggymetrics.auth.security.PasswordGrantAuthenticationProvider;
@@ -14,7 +15,6 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.OAuth2Token;
-import org.springframework.security.oauth2.server.authorization.InMemoryOAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.client.InMemoryRegisteredClientRepository;
@@ -28,6 +28,7 @@ import org.springframework.security.oauth2.server.authorization.token.Delegating
 import org.springframework.security.oauth2.server.authorization.token.OAuth2AccessTokenGenerator;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2RefreshTokenGenerator;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.security.oauth2.server.resource.introspection.OpaqueTokenIntrospector;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationConverter;
@@ -39,6 +40,7 @@ import java.time.Duration;
  * @author cdov
  */
 @Configuration
+@EnableScheduling
 public class OAuth2AuthorizationConfig {
 
     private static final String NOOP_PASSWORD_ENCODE = "{noop}";
@@ -124,7 +126,7 @@ public class OAuth2AuthorizationConfig {
 
     @Bean
     public OAuth2AuthorizationService authorizationService() {
-        return new InMemoryOAuth2AuthorizationService();
+        return new ExpiringInMemoryOAuth2AuthorizationService();
     }
 
     @Bean
