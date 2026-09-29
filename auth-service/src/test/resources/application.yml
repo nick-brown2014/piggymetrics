@@ -1,5 +1,25 @@
 spring:
+  cloud:
+    config:
+      enabled: false
   data:
     mongodb:
       database: piggymetrics
-      port: 0
+
+de:
+  flapdoodle:
+    mongodb:
+      embedded:
+        version: 7.0.14
+
+eureka:
+  client:
+    enabled: false
+
+management:
+  tracing:
+    enabled: false
+
+ACCOUNT_SERVICE_PASSWORD: account-pass
+STATISTICS_SERVICE_PASSWORD: stats-pass
+NOTIFICATION_SERVICE_PASSWORD: notif-pass
