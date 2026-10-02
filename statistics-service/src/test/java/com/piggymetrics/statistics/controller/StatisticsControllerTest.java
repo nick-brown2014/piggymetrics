@@ -2,6 +2,7 @@ package com.piggymetrics.statistics.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableList;
+import com.piggymetrics.statistics.config.ResourceServerConfig;
 import com.piggymetrics.statistics.domain.Account;
 import com.piggymetrics.statistics.domain.Currency;
 import com.piggymetrics.statistics.domain.Item;
@@ -10,54 +11,45 @@ import com.piggymetrics.statistics.domain.TimePeriod;
 import com.piggymetrics.statistics.domain.timeseries.DataPoint;
 import com.piggymetrics.statistics.domain.timeseries.DataPointId;
 import com.piggymetrics.statistics.service.StatisticsService;
-import com.sun.security.auth.UserPrincipal;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.junit4.SpringRunner;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.math.BigDecimal;
 import java.util.Date;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.MockitoAnnotations.initMocks;
-import static org.mockito.internal.verification.VerificationModeFactory.times;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.opaqueToken;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@RunWith(SpringRunner.class)
-@SpringBootTest
-public class StatisticsControllerTest {
+@WebMvcTest(StatisticsController.class)
+@Import(ResourceServerConfig.class)
+class StatisticsControllerTest {
 
 	private static final ObjectMapper mapper = new ObjectMapper();
 
-	@InjectMocks
-	private StatisticsController statisticsController;
-
-	@Mock
-	private StatisticsService statisticsService;
-
+	@Autowired
 	private MockMvc mockMvc;
 
-	@Before
-	public void setup() {
-		initMocks(this);
-		this.mockMvc = MockMvcBuilders.standaloneSetup(statisticsController).build();
-	}
+	@MockBean
+	private StatisticsService statisticsService;
 
 	@Test
-	public void shouldGetStatisticsByAccountName() throws Exception {
+	void shouldGetStatisticsByAccountName() throws Exception {
 
 		final DataPoint dataPoint = new DataPoint();
 		dataPoint.setId(new DataPointId("test", new Date()));
@@ -65,13 +57,31 @@ public class StatisticsControllerTest {
 		when(statisticsService.findByAccountName(dataPoint.getId().getAccount()))
 				.thenReturn(ImmutableList.of(dataPoint));
 
-		mockMvc.perform(get("/test").principal(new UserPrincipal(dataPoint.getId().getAccount())))
+		mockMvc.perform(get("/test").with(serverToken()))
 				.andExpect(jsonPath("$[0].id.account").value(dataPoint.getId().getAccount()))
 				.andExpect(status().isOk());
 	}
 
 	@Test
-	public void shouldGetCurrentAccountStatistics() throws Exception {
+	void shouldGetDemoStatisticsWithoutServerScope() throws Exception {
+
+		when(statisticsService.findByAccountName("demo")).thenReturn(ImmutableList.of());
+
+		mockMvc.perform(get("/demo").with(userToken("someone")))
+				.andExpect(status().isOk());
+	}
+
+	@Test
+	void shouldNotGetStatisticsByAccountNameWithoutServerScope() throws Exception {
+
+		mockMvc.perform(get("/test").with(userToken("someone")))
+				.andExpect(status().isForbidden());
+
+		verify(statisticsService, never()).findByAccountName(anyString());
+	}
+
+	@Test
+	void shouldGetCurrentAccountStatistics() throws Exception {
 
 		final DataPoint dataPoint = new DataPoint();
 		dataPoint.setId(new DataPointId("test", new Date()));
@@ -79,13 +89,41 @@ public class StatisticsControllerTest {
 		when(statisticsService.findByAccountName(dataPoint.getId().getAccount()))
 				.thenReturn(ImmutableList.of(dataPoint));
 
-		mockMvc.perform(get("/current").principal(new UserPrincipal(dataPoint.getId().getAccount())))
+		mockMvc.perform(get("/current").with(userToken(dataPoint.getId().getAccount())))
 				.andExpect(jsonPath("$[0].id.account").value(dataPoint.getId().getAccount()))
 				.andExpect(status().isOk());
 	}
 
 	@Test
-	public void shouldSaveAccountStatistics() throws Exception {
+	void shouldRequireAuthentication() throws Exception {
+
+		mockMvc.perform(get("/current"))
+				.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void shouldSaveAccountStatistics() throws Exception {
+
+		String json = mapper.writeValueAsString(account());
+
+		mockMvc.perform(put("/test").with(serverToken()).contentType(MediaType.APPLICATION_JSON).content(json))
+				.andExpect(status().isOk());
+
+		verify(statisticsService, times(1)).save(anyString(), any(Account.class));
+	}
+
+	@Test
+	void shouldNotSaveAccountStatisticsWithoutServerScope() throws Exception {
+
+		String json = mapper.writeValueAsString(account());
+
+		mockMvc.perform(put("/test").with(userToken("test")).contentType(MediaType.APPLICATION_JSON).content(json))
+				.andExpect(status().isForbidden());
+
+		verify(statisticsService, never()).save(anyString(), any(Account.class));
+	}
+
+	private static Account account() {
 
 		Saving saving = new Saving();
 		saving.setAmount(new BigDecimal(1500));
@@ -110,12 +148,18 @@ public class StatisticsControllerTest {
 		account.setSaving(saving);
 		account.setExpenses(ImmutableList.of(grocery));
 		account.setIncomes(ImmutableList.of(salary));
+		return account;
+	}
 
-		String json = mapper.writeValueAsString(account);
+	private static RequestPostProcessor serverToken() {
+		return opaqueToken()
+				.attributes(attrs -> attrs.put("sub", "account-service"))
+				.authorities(new SimpleGrantedAuthority("SCOPE_server"));
+	}
 
-		mockMvc.perform(put("/test").contentType(MediaType.APPLICATION_JSON).content(json))
-				.andExpect(status().isOk());
-
-		verify(statisticsService, times(1)).save(anyString(), any(Account.class));
+	private static RequestPostProcessor userToken(String name) {
+		return opaqueToken()
+				.attributes(attrs -> attrs.put("sub", name))
+				.authorities(new SimpleGrantedAuthority("ROLE_USER"), new SimpleGrantedAuthority("SCOPE_ui"));
 	}
 }
