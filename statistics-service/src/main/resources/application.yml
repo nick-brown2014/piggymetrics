@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: statistics-service
+  config:
+    import: optional:configserver:http://config:8888
+  cloud:
+    config:
+      fail-fast: true
+      password: ${CONFIG_SERVICE_PASSWORD}
+      username: user
+    openfeign:
+      circuitbreaker:
+        enabled: true
+
+resilience4j:
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 10s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,refresh
+  tracing:
+    propagation:
+      type: b3
